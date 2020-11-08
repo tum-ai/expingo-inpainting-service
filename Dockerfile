@@ -38,5 +38,7 @@ WORKDIR /app
 COPY . .
 RUN pip install .
 
+env PORT=8080
+
 WORKDIR /app/app
 CMD ["python", "main.py"]
