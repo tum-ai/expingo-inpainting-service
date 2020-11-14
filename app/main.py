@@ -4,6 +4,7 @@ import cv2
 import uvicorn
 import tensorflow as tf
 import neuralgym as ng
+from fastapi.middleware.cors import CORSMiddleware
 
 from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import FileResponse
@@ -14,6 +15,18 @@ FLAGS = ng.Config('inpaint.yml')
 MODEL_DIR = "../model_logs/places2"
 MODEL = InpaintCAModel()
 app = FastAPI()
+
+origins = [
+    "*"
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"]
+)
 
 
 @app.get("/")
@@ -61,9 +74,8 @@ async def create_upload_file(image: UploadFile = File(...), mask: UploadFile = F
         print('Model loaded.')
         result = sess.run(output)
         cv2.imwrite("output.png", result[0][:, :, ::-1])
-        return {
-            "image": FileResponse("output.png")
-        }
+        return FileResponse("output.png")
+
 
 if __name__ == '__main__':
     uvicorn.run(app, host="0.0.0.0", port=8080)
