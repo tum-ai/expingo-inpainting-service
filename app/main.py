@@ -5,10 +5,17 @@ import uvicorn
 import tensorflow as tf
 import neuralgym as ng
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
 from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import FileResponse
+from fastapi import HTTPException
 from inpaint.inpainting_model import InpaintCAModel
+
+
+class PaintRequest(BaseModel):
+    image: str
+    mask: str
 
 
 FLAGS = ng.Config('inpaint.yml')
@@ -35,14 +42,37 @@ async def root():
 
 
 @app.post("/inpaint/")
-async def create_upload_file(image: UploadFile = File(...), mask: UploadFile = File(...)):
-    image_raw = await image.read()
-    mask_raw = await mask.read()
+async def create_upload_file(request: PaintRequest):
+    import base64
+    import io
+    from PIL import Image
+    image = request.image
+    mask = request.mask
 
-    image = cv2.imdecode(np.fromstring(image_raw, np.uint8), cv2.IMREAD_COLOR)
-    mask = cv2.imdecode(np.fromstring(mask_raw, np.uint8), cv2.IMREAD_COLOR)
+    image = image.split(",", 1)[1]
+    mask = mask.split(",", 1)[1]
 
-    assert image.shape == mask.shape, "Image and Mask shape are unequal."
+    base64_decoded_image = base64.b64decode(image)
+
+    image = Image.open(io.BytesIO(base64_decoded_image))
+    image = np.array(image)
+
+    base64_decoded_mask = base64.b64decode(mask)
+
+    mask = Image.open(io.BytesIO(base64_decoded_mask))
+    mask = np.array(mask)
+    mask = mask[:, :, 0:3]
+
+    # image_raw = await image.read()
+    # mask_raw = await mask.read()
+
+    # image = cv2.imdecode(np.fromstring(image_raw, np.uint8), cv2.IMREAD_COLOR)
+    # mask = cv2.imdecode(np.fromstring(mask_raw, np.uint8), cv2.IMREAD_COLOR)
+
+    if image.shape[:2] != mask.shape[:2]:
+        raise HTTPException(
+            code=400,
+            detail=f"Image and Mask have unequal shape. {image.shape} vs {mask.shape}")
 
     h, w, _ = image.shape
     grid = 8
@@ -73,9 +103,10 @@ async def create_upload_file(image: UploadFile = File(...), mask: UploadFile = F
         sess.run(assign_ops)
         print('Model loaded.')
         result = sess.run(output)
-        cv2.imwrite("output.png", result[0][:, :, ::-1])
-        return FileResponse("output.png")
+        cv2.imwrite("output.png", result[0])
+    tf.reset_default_graph()
+    return FileResponse("output.png", media_type="image/png")
 
 
 if __name__ == '__main__':
-    uvicorn.run(app, host="0.0.0.0", port=8080)
+    uvicorn.run(app, host="0.0.0.0", port=8081)
