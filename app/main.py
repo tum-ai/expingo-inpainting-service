@@ -8,7 +8,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from fastapi import FastAPI, UploadFile, File
-from fastapi.responses import FileResponse
 from fastapi import HTTPException
 from inpaint.inpainting_model import InpaintCAModel
 
@@ -105,8 +104,13 @@ async def create_upload_file(request: PaintRequest):
         result = sess.run(output)
         cv2.imwrite("output.png", result[0])
     tf.reset_default_graph()
-    return FileResponse("output.png", media_type="image/png")
+    #return FileResponse("output.png", media_type="image/png")
+    with open("output.png", "rb") as image_file:
+        image_string = "data:image/png;base64,{}".format(base64.b64encode(image_file.read()).decode())
+    return {
+        "image": image_string
+    }
 
 
 if __name__ == '__main__':
-    uvicorn.run(app, host="0.0.0.0", port=8081)
+    uvicorn.run(app, host="0.0.0.0", port=8080)
