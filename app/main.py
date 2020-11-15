@@ -60,18 +60,21 @@ async def create_upload_file(request: PaintRequest):
 
     mask = Image.open(io.BytesIO(base64_decoded_mask))
     mask = np.array(mask)
-    mask = mask[:, :, 0:3]
 
-    # image_raw = await image.read()
-    # mask_raw = await mask.read()
+    # mask is always PNG, image might have only 3 dimensions.
+    mask = mask[:, :, :3]
+    if image.shape[2] == 4:
+        image = image[:, :, :3]
 
-    # image = cv2.imdecode(np.fromstring(image_raw, np.uint8), cv2.IMREAD_COLOR)
-    # mask = cv2.imdecode(np.fromstring(mask_raw, np.uint8), cv2.IMREAD_COLOR)
-
-    if image.shape[:2] != mask.shape[:2]:
+    # Catch weird error that image is turned if format is jpg and upright
+    if image.shape[0] == mask.shape[1] and image.shape[1] == mask.shape[0]:
+        image = np.flip(np.transpose(image, (1, 0, 2)), axis=1)
+    if image.shape != mask.shape:
         raise HTTPException(
-            code=400,
+            status_code=400,
             detail=f"Image and Mask have unequal shape. {image.shape} vs {mask.shape}")
+
+    # Image and Mask must be same dimension by now. Both have dimensions (x, y, 3)
 
     h, w, _ = image.shape
     grid = 8
@@ -81,7 +84,10 @@ async def create_upload_file(request: PaintRequest):
 
     image = np.expand_dims(image, 0)
     mask = np.expand_dims(mask, 0)
+    print(image.shape)
+    print(mask.shape)
     input_image = np.concatenate([image, mask], axis=2)
+    print(input_image.shape)
 
     sess_config = tf.ConfigProto()
     sess_config.gpu_options.allow_growth = True
